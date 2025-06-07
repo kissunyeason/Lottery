@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公司抽奖软件 (高级版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', 'Helvetica Neue', 'Arial', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background-color: #111827;
+            color: #e5e7eb;
+        }
+        .card {
+            background-color: #1f2937;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #374151;
+        }
+        .btn { transition: all 0.3s ease; }
+        .btn-primary { background-color: #4f46e5; color: white; }
+        .btn-primary:hover { background-color: #4338ca; }
+        .btn-secondary { background-color: #374151; }
+        .btn-secondary:hover { background-color: #4b5563; }
+        .btn-danger { background-color: #dc2626; color: white; }
+        .btn-danger:hover { background-color: #b91c1c; }
+        #winner-display, #presentation-winner-display {
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-shadow: 0 0 10px #4f46e5, 0 0 20px #4f46e5;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); }
+        .modal-content { position: relative; margin: 5% auto; padding: 2rem; width: 90%; max-width: 600px; }
+        .scroll-list::-webkit-scrollbar { width: 8px; }
+        .scroll-list::-webkit-scrollbar-track { background: #1f2937; }
+        .scroll-list::-webkit-scrollbar-thumb { background-color: #4f46e5; border-radius: 10px; border: 2px solid #1f2937; }
+        .department-checkbox { display: flex; align-items: center; }
+        .draw-plan-item {
+            display: flex;
+            align-items: center;
+            background-color: #374151;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: grab;
+            user-select: none;
+        }
+        .draw-plan-item.dragging {
+            opacity: 0.5;
+            background: #4f46e5;
+        }
+        #presentation-view {
+            background: radial-gradient(circle, #1f2937, #111827);
+        }
+        #event-title-input {
+            background-color: transparent;
+            border: none;
+            color: white;
+            text-align: center;
+        }
+        #event-title-input:focus {
+            box-shadow: none;
+            ring: 2px;
+            ring-color: #4f46e5;
+        }
+    </style>
+</head>
+<body class="p-4">
+    <!-- 配置视图 -->
+    <div id="config-view">
+        <header class="text-center mb-4 flex justify-between items-center">
+            <div class="flex-1"></div>
+             <input type="text" id="event-title-input" value="公司年度抽奖" class="flex-1 text-4xl md:text-5xl font-bold tracking-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md px-2">
+            <div class="flex-1 text-right">
+                <button id="enter-presentation-mode" class="btn btn-primary px-6 py-2 rounded-lg"><i class="fas fa-desktop mr-2"></i>进入抽奖</button>
+            </div>
+        </header>
+
+        <div class="w-full max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-5 gap-6">
+            <div class="xl:col-span-2 card p-6 flex flex-col">
+                <h2 class="text-2xl font-bold mb-4 border-b border-gray-600 pb-2"><i class="fas fa-users mr-2"></i>参与者管理</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="csv-file" class="block text-sm font-medium text-gray-300 mb-2">从 CSV 文件导入 (格式: 姓名,部门,工号):</label>
+                        <input type="file" id="csv-file" accept=".csv" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"/>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-700">
+                         <p class="text-sm">当前人数: <span id="participant-count" class="font-bold text-lg text-indigo-400">0</span></p>
+                         <button id="clear-all" class="btn btn-danger text-sm px-3 py-1 rounded-md"><i class="fas fa-trash-alt mr-1"></i>清空全部</button>
+                    </div>
+                </div>
+                <div class="flex-grow mt-4 flex flex-col min-h-0">
+                    <div class="grid grid-cols-12 gap-4 px-3 pb-2 border-b border-gray-700 text-sm text-gray-400 font-bold">
+                        <span class="col-span-4">姓名</span>
+                        <span class="col-span-4">部门</span>
+                        <span class="col-span-3">工号</span>
+                        <span class="col-span-1 text-right pr-4">操作</span>
+                    </div>
+                    <div id="participant-list" class="scroll-list overflow-y-auto flex-grow"></div>
+                </div>
+                 <h3 class="text-xl font-bold mt-6 mb-2 border-b border-gray-600 pb-2"><i class="fas fa-building mr-2"></i>部门筛选</h3>
+                 <div id="department-filter" class="scroll-list grid grid-cols-2 sm:grid-cols-3 gap-2 h-32 overflow-y-auto pr-2">
+                    <p class="text-gray-500 col-span-full">请先导入参与者名单...</p>
+                 </div>
+            </div>
+            <div class="xl:col-span-3 card p-6 flex flex-col">
+                <h2 class="text-2xl font-bold mb-4 border-b border-gray-600 pb-2"><i class="fas fa-award mr-2"></i>抽奖流程设计</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">添加抽奖轮次</h3>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="text" id="prize-name" placeholder="奖项名称" class="w-full sm:flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500">
+                                <input type="number" id="round-quantity" placeholder="本轮人数" value="1" min="1" class="w-full sm:w-28 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                             <div class="flex items-center gap-2">
+                                <button id="select-image-btn" class="btn btn-secondary px-4 py-2 rounded-md"><i class="fas fa-image mr-2"></i>选择图片</button>
+                                <span id="image-preview-name" class="text-sm text-gray-400 truncate">未选择图片</span>
+                                <input type="file" id="prize-image-input" class="hidden" accept="image/*">
+                             </div>
+                             <button id="add-round" class="btn btn-secondary px-4 py-2 rounded-md whitespace-nowrap flex-shrink-0"><i class="fas fa-plus"></i> 添加轮次</button>
+                        </div>
+                         <div class="flex gap-2 mt-2">
+                            <button id="import-plan-btn" class="btn btn-secondary text-sm flex-1"><i class="fas fa-file-import mr-1"></i> 导入流程</button>
+                            <button id="export-plan-btn" class="btn btn-secondary text-sm flex-1"><i class="fas fa-file-export mr-1"></i> 导出流程</button>
+                            <input type="file" id="plan-file-input" class="hidden" accept=".csv">
+                        </div>
+                        <h3 class="text-lg font-semibold mt-4 mb-2">抽奖顺序 (可拖动排序)</h3>
+                        <div id="draw-plan-list" class="mt-2 space-y-2 h-40 overflow-y-auto pr-2 scroll-list"></div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center text-center bg-gray-900/30 p-4 rounded-lg">
+                         <div id="current-draw-info" class="mb-4 text-lg">
+                            <span class="text-gray-400">即将抽取: </span>
+                            <span id="current-draw-text" class="font-bold text-xl text-amber-300">未设置</span>
+                         </div>
+                         <div class="mb-4 flex items-center justify-center">
+                            <input type="checkbox" id="allow-duplicates" class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500">
+                            <label for="allow-duplicates" class="ml-2 text-sm text-gray-300">允许重复中奖</label>
+                         </div>
+                         <div id="winner-display" class="mb-6 w-full bg-gray-900/50 p-4 rounded-lg border-2 border-dashed border-gray-600">准备就绪</div>
+                         <button id="start-lottery-config" class="start-lottery-btn btn btn-primary w-full max-w-xs py-3 px-6 text-xl font-bold rounded-lg shadow-lg transform hover:scale-105">
+                            <i class="fas fa-rocket mr-2"></i> 开始抽奖!
+                         </button>
+                         <div class="mt-4">
+                            <button id="copy-all-winners" class="btn btn-secondary px-4 py-2 rounded-md"><i class="fas fa-copy mr-2"></i>复制所有中奖结果</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 中奖全名单显示区 -->
+                <div class="mt-6">
+                    <h2 class="text-2xl font-bold mb-4 border-b border-gray-600 pb-2"><i class="fas fa-trophy mr-2 text-amber-300"></i>中奖全名单</h2>
+                    <div id="results-display" class="scroll-list h-48 overflow-y-auto pr-2">
+                        <p class="text-gray-500 text-center mt-4">暂无中奖者</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 演示视图 -->
+    <div id="presentation-view" class="hidden min-h-screen w-full flex flex-col items-center justify-center p-8 text-center">
+        <button id="exit-presentation-mode" class="absolute top-5 right-5 text-gray-500 hover:text-white text-2xl z-10">
+            <i class="fas fa-times-circle"></i>
+        </button>
+        <h1 id="presentation-title" class="text-5xl md:text-7xl font-bold text-white tracking-tight mb-4">公司年度抽奖</h1>
+        <img id="presentation-prize-image" src="https://placehold.co/600x400/1f2937/e5e7eb?text=奖品图片" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1f2937/e5e7eb?text=奖品图片';" class="max-w-md w-full h-auto rounded-lg shadow-2xl mb-6 object-cover">
+        <div class="mb-6">
+            <h2 id="presentation-prize-name" class="text-4xl md:text-5xl font-bold text-amber-300">未设置</h2>
+            <p id="presentation-round-info" class="text-2xl text-gray-400 mt-2">（0/0 人）</p>
+        </div>
+        <div id="presentation-winner-display" class="mb-8 w-full max-w-4xl">准备就绪</div>
+        <button id="start-lottery-presentation" class="start-lottery-btn btn btn-primary w-full max-w-sm py-4 px-8 text-3xl font-bold rounded-lg shadow-lg transform hover:scale-105">
+            <i class="fas fa-rocket mr-2"></i> 开始抽奖!
+        </button>
+        <div class="mt-8 w-full max-w-6xl">
+            <h3 class="text-2xl font-bold text-gray-400 mb-4 border-t-2 border-gray-700 pt-4">中奖全名单</h3>
+            <div id="presentation-results-display" class="scroll-list h-64 overflow-y-auto pr-2 text-left">
+                <p class="text-gray-500 text-center mt-4">暂无中奖者</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 内定中奖者弹窗 -->
+    <div id="designate-modal" class="modal">
+        <div class="modal-content card">
+            <h3 class="text-2xl font-bold text-center mb-4">为 <span id="designate-prize-name" class="text-amber-300"></span> 指定中奖者</h3>
+            <input type="text" id="designate-search" placeholder="搜索姓名或工号..." class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 mb-4">
+            <div id="designate-list" class="scroll-list h-64 overflow-y-auto space-y-2"></div>
+            <div class="mt-6 flex justify-center">
+                <button id="designate-modal-close" class="btn btn-secondary px-6 py-2 rounded-md">关闭</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 提示消息 -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-xl text-sm opacity-0 transition-opacity duration-300"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- 元素获取 ---
+        const configView = document.getElementById('config-view');
+        const presentationView = document.getElementById('presentation-view');
+        const enterPresentationBtn = document.getElementById('enter-presentation-mode');
+        const exitPresentationBtn = document.getElementById('exit-presentation-mode');
+        const eventTitleInput = document.getElementById('event-title-input');
+        
+        const csvFileInput = document.getElementById('csv-file');
+        const participantCountSpan = document.getElementById('participant-count');
+        const participantListDiv = document.getElementById('participant-list');
+        const clearAllBtn = document.getElementById('clear-all');
+        const departmentFilterDiv = document.getElementById('department-filter');
+        
+        const prizeNameInput = document.getElementById('prize-name');
+        const roundQuantityInput = document.getElementById('round-quantity');
+        const selectImageBtn = document.getElementById('select-image-btn');
+        const prizeImageInput = document.getElementById('prize-image-input');
+        const imagePreviewName = document.getElementById('image-preview-name');
+        const addRoundBtn = document.getElementById('add-round');
+        const drawPlanListDiv = document.getElementById('draw-plan-list');
+        
+        const currentDrawText = document.getElementById('current-draw-text');
+        const allowDuplicatesCheckbox = document.getElementById('allow-duplicates');
+        const winnerDisplay = document.getElementById('winner-display');
+        const startLotteryButtons = document.querySelectorAll('.start-lottery-btn');
+        const copyAllWinnersBtn = document.getElementById('copy-all-winners');
+        const resultsDisplayDiv = document.getElementById('results-display');
+        const presResultsDisplayDiv = document.getElementById('presentation-results-display');
+
+        const designateModal = document.getElementById('designate-modal');
+        const designatePrizeName = document.getElementById('designate-prize-name');
+        const designateSearchInput = document.getElementById('designate-search');
+        const designateListDiv = document.getElementById('designate-list');
+        const designateModalCloseBtn = document.getElementById('designate-modal-close');
+        
+        const toast = document.getElementById('toast');
+
+        // Presentation View Elements
+        const presPrizeImage = document.getElementById('presentation-prize-image');
+        const presPrizeName = document.getElementById('presentation-prize-name');
+        const presRoundInfo = document.getElementById('presentation-round-info');
+        const presWinnerDisplay = document.getElementById('presentation-winner-display');
+        const presentationTitle = document.getElementById('presentation-title');
+
+        // Plan Import/Export Elements
+        const importPlanBtn = document.getElementById('import-plan-btn');
+        const exportPlanBtn = document.getElementById('export-plan-btn');
+        const planFileInput = document.getElementById('plan-file-input');
+
+        // --- 状态管理 ---
+        let participants = []; // {id, name, department, employeeId}
+        let drawPlan = []; // {id, prizeName, roundName, quantity, imageUrl, designatedWinners: [], actualWinners: []}
+        let nextParticipantId = 0;
+        let nextRoundId = 0;
+        let isDrawing = false;
+        let activeDesignateRoundId = null;
+        let selectedImageDataUrl = null;
+
+        // --- 音效设置 (延迟初始化) ---
+        let rollingSound = null;
+        let winnerSound = null;
+        let soundEnabled = false;
+
+        // --- 通用函数 ---
+        const showToast = (message, isError = false) => {
+            toast.textContent = message;
+            toast.className = toast.className.replace(/bg-green-500|bg-red-500/g, '');
+            toast.classList.add(isError ? 'bg-red-500' : 'bg-green-500');
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        };
+        
+        const copyToClipboard = (text) => {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('已成功复制到剪贴板！');
+            } catch (err) {
+                showToast('复制失败！', true);
+            }
+            document.body.removeChild(textArea);
+        };
+        
+        // --- 渲染函数 ---
+        function renderAll() {
+            renderParticipants();
+            renderDepartments();
+            renderDrawPlan();
+            updateCurrentDrawInfo();
+            renderResults();
+        }
+
+        function renderParticipants(filter = '') {
+            participantListDiv.innerHTML = '';
+            const filteredParticipants = filter ? participants.filter(p => p.name.includes(filter) || p.employeeId.includes(filter)) : participants;
+            
+            filteredParticipants.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'grid grid-cols-12 gap-4 items-center px-3 py-2 text-sm hover:bg-gray-700/50 rounded-md';
+                item.innerHTML = `
+                    <span class="truncate col-span-4">${p.name}</span>
+                    <span class="truncate text-gray-400 col-span-4">${p.department}</span>
+                    <span class="truncate text-gray-400 col-span-3">${p.employeeId}</span>
+                    <button data-id="${p.id}" class="remove-participant text-gray-500 hover:text-red-400 col-span-1 text-right">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                `;
+                participantListDiv.appendChild(item);
+            });
+            participantCountSpan.textContent = participants.length;
+        }
+
+        function renderDepartments() {
+            const departments = [...new Set(participants.map(p => p.department))];
+            departmentFilterDiv.innerHTML = '';
+            if (departments.length === 0) {
+                departmentFilterDiv.innerHTML = '<p class="text-gray-500 col-span-full">请先导入参与者名单...</p>';
+                return;
+            }
+            departments.sort().forEach(dept => {
+                const div = document.createElement('div');
+                div.className = 'department-checkbox text-sm';
+                div.innerHTML = `
+                    <input type="checkbox" id="dept-${dept}" data-dept="${dept}" class="mr-2 bg-gray-700 rounded" checked>
+                    <label for="dept-${dept}" class="truncate">${dept}</label>
+                `;
+                departmentFilterDiv.appendChild(div);
+            });
+        }
+
+        function renderDrawPlan() {
+            drawPlanListDiv.innerHTML = '';
+            drawPlan.forEach(round => {
+                const item = document.createElement('div');
+                item.className = 'draw-plan-item';
+                item.setAttribute('draggable', true);
+                item.dataset.id = round.id;
+
+                item.innerHTML = `
+                    <i class="fas fa-grip-vertical mr-3 text-gray-500"></i>
+                    <div class="flex-grow">
+                        <span class="font-bold">${round.prizeName}</span>
+                        <span class="text-sm text-gray-400 ml-2">${round.roundName}</span>
+                        <span class="text-sm text-gray-400 ml-2">(${round.actualWinners.length}/${round.quantity}人)</span>
+                    </div>
+                    <button data-id="${round.id}" class="designate-winner-btn btn btn-secondary text-xs px-2 py-1 rounded-md mr-2"><i class="fas fa-user-check"></i></button>
+                    <button data-id="${round.id}" class="remove-round-btn text-gray-500 hover:text-red-400 text-xs"><i class="fas fa-trash"></i></button>
+                `;
+                drawPlanListDiv.appendChild(item);
+            });
+        }
+
+        function renderResults() {
+            const resultsByPrize = {};
+
+            drawPlan.forEach(round => {
+                if (round.actualWinners.length > 0) {
+                    if (!resultsByPrize[round.prizeName]) {
+                        resultsByPrize[round.prizeName] = [];
+                    }
+                    const winnerObjects = round.actualWinners.map(id => participants.find(p => p.id === id)).filter(Boolean);
+                    resultsByPrize[round.prizeName].push(...winnerObjects);
+                }
+            });
+
+            if (Object.keys(resultsByPrize).length === 0) {
+                const noWinnerHtml = '<p class="text-gray-500 text-center mt-4">暂无中奖者</p>';
+                resultsDisplayDiv.innerHTML = noWinnerHtml;
+                presResultsDisplayDiv.innerHTML = noWinnerHtml;
+                return;
+            }
+
+            let resultsHtmlConfig = '';
+            let resultsHtmlPres = '';
+
+            for (const prizeName in resultsByPrize) {
+                resultsHtmlConfig += `<div class="mb-4">
+                                        <h4 class="font-bold text-lg text-amber-300 mb-2">${prizeName}</h4>
+                                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">`;
+                
+                resultsHtmlPres += `<div class="mb-4">
+                                      <h4 class="font-bold text-xl text-amber-300 mb-3">${prizeName}</h4>
+                                      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">`;
+
+                resultsByPrize[prizeName].forEach(winner => {
+                    resultsHtmlConfig += `<div class="bg-gray-800 p-2 rounded-md text-center text-sm">
+                                            <p class="font-semibold truncate">${winner.name}</p>
+                                            <p class="text-xs text-gray-400 truncate">${winner.department}</p>
+                                         </div>`;
+                    resultsHtmlPres += `<div class="bg-gray-800 p-3 rounded-lg text-center text-base">
+                                          <p class="font-semibold truncate">${winner.name}</p>
+                                          <p class="text-sm text-gray-400 truncate">${winner.department}</p>
+                                       </div>`;
+                });
+
+                resultsHtmlConfig += `</div></div>`;
+                resultsHtmlPres += `</div></div>`;
+            }
+
+            resultsDisplayDiv.innerHTML = resultsHtmlConfig;
+            presResultsDisplayDiv.innerHTML = resultsHtmlPres;
+        }
+        
+        function updateCurrentDrawInfo() {
+            const nextRound = drawPlan.find(r => r.actualWinners.length < r.quantity);
+            if(nextRound) {
+                const infoText = `${nextRound.prizeName} - ${nextRound.roundName}`;
+                const roundDetailsText = `(${nextRound.actualWinners.length}/${nextRound.quantity}人)`;
+                
+                currentDrawText.textContent = infoText;
+                presPrizeName.textContent = nextRound.prizeName;
+                presRoundInfo.textContent = `${nextRound.roundName} ${roundDetailsText}`;
+                presPrizeImage.src = nextRound.imageUrl || 'https://placehold.co/600x400/1f2937/e5e7eb?text=奖品图片';
+                
+                startLotteryButtons.forEach(btn => btn.disabled = false);
+            } else {
+                currentDrawText.textContent = '所有奖项已抽完';
+                presPrizeName.textContent = '抽奖结束';
+                presRoundInfo.textContent = '感谢参与！';
+                startLotteryButtons.forEach(btn => btn.disabled = true);
+            }
+        }
+
+        // --- 参与者管理 ---
+        function handleCsvFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const lines = e.target.result.split(/\r\n|\n/).filter(line => line.trim() !== '');
+                let addedCount = 0;
+                lines.forEach(line => {
+                    const [name, department, employeeId] = line.split(',').map(s => s.trim());
+                    if (name && department && employeeId && !participants.some(p => p.employeeId === employeeId)) {
+                        participants.push({ id: nextParticipantId++, name, department, employeeId });
+                        addedCount++;
+                    }
+                });
+                showToast(`成功导入 ${addedCount} 名参与者！`);
+                renderAll();
+            };
+            reader.readAsText(file);
+        }
+
+        // --- 抽奖流程管理 ---
+        function addRound() {
+            const prizeName = prizeNameInput.value.trim();
+            const quantity = parseInt(roundQuantityInput.value);
+            if (!prizeName || quantity <= 0) {
+                showToast('请输入有效的奖项名称和人数', true);
+                return;
+            }
+
+            const roundsForThisPrize = drawPlan.filter(r => r.prizeName === prizeName).length;
+            const roundName = `第 ${roundsForThisPrize + 1} 轮`;
+            
+            drawPlan.push({ 
+                id: nextRoundId++, 
+                prizeName, 
+                roundName,
+                quantity, 
+                imageUrl: selectedImageDataUrl,
+                designatedWinners: [], 
+                actualWinners: [] 
+            });
+
+            prizeNameInput.value = '';
+            roundQuantityInput.value = '1';
+            prizeImageInput.value = '';
+            selectedImageDataUrl = null;
+            imagePreviewName.textContent = '未选择图片';
+            renderDrawPlan();
+            updateCurrentDrawInfo();
+        }
+        
+        function openDesignateModal(roundId) {
+            activeDesignateRoundId = roundId;
+            const round = drawPlan.find(r => r.id === roundId);
+            designatePrizeName.textContent = `${round.prizeName} - ${round.roundName}`;
+            renderDesignateList();
+            designateModal.style.display = 'block';
+        }
+        
+        function renderDesignateList(searchTerm = '') {
+            designateListDiv.innerHTML = '';
+            const round = drawPlan.find(r => r.id === activeDesignateRoundId);
+            if (!round) return;
+
+            const remainingCapacity = round.quantity - round.designatedWinners.length;
+            const allDesignatedIds = drawPlan.flatMap(r => r.designatedWinners);
+            const alreadyWonIds = allowDuplicatesCheckbox.checked ? [] : drawPlan.flatMap(r => r.actualWinners);
+
+            let availableParticipants = participants.filter(p => !alreadyWonIds.includes(p.id) && (!allDesignatedIds.includes(p.id) || round.designatedWinners.includes(p.id)));
+            if(searchTerm) {
+                availableParticipants = availableParticipants.filter(p => p.name.includes(searchTerm) || p.employeeId.includes(searchTerm));
+            }
+
+            availableParticipants.forEach(p => {
+                const isDesignated = round.designatedWinners.includes(p.id);
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center p-2 rounded hover:bg-gray-700';
+                item.innerHTML = `
+                    <span>${p.name} <span class="text-xs text-gray-400">${p.department} / ${p.employeeId}</span></span>
+                    <button data-id="${p.id}" class="designate-toggle-btn btn ${isDesignated ? 'btn-danger' : 'btn-secondary'} text-xs px-2 py-1 rounded-md">
+                        ${isDesignated ? '取消' : (remainingCapacity > 0 ? '指定' : '名额已满')}
+                    </button>
+                `;
+                const button = item.querySelector('.designate-toggle-btn');
+                if(!isDesignated && remainingCapacity <= 0) button.disabled = true;
+                
+                designateListDiv.appendChild(item);
+            });
+        }
+        
+        function toggleDesignation(participantId) {
+            const round = drawPlan.find(r => r.id === activeDesignateRoundId);
+            if (!round) return;
+            const isDesignated = round.designatedWinners.includes(participantId);
+            if (isDesignated) {
+                round.designatedWinners = round.designatedWinners.filter(id => id !== participantId);
+            } else {
+                if (round.designatedWinners.length < round.quantity) {
+                    round.designatedWinners.push(participantId);
+                } else {
+                    showToast('该轮次的内定名额已满！', true);
+                }
+            }
+            renderDesignateList(designateSearchInput.value);
+            renderDrawPlan();
+        }
+
+        // --- 抽奖逻辑 ---
+        function startLottery() {
+            if (isDrawing) return;
+
+            isDrawing = true;
+            startLotteryButtons.forEach(btn => {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-sync-alt fa-spin mr-2"></i>抽奖中...';
+            });
+            winnerDisplay.innerHTML = '';
+            presWinnerDisplay.innerHTML = '';
+
+
+            let animationInterval = null;
+
+            setTimeout(() => {
+                try {
+                    const allowDuplicates = allowDuplicatesCheckbox.checked;
+                    const currentRound = drawPlan.find(r => r.actualWinners.length < r.quantity);
+                    
+                    if (!currentRound) throw new Error('所有奖项已抽完！');
+
+                    const alreadyWonIds = allowDuplicates ? [] : drawPlan.flatMap(r => r.actualWinners);
+                    const selectedDepartments = Array.from(departmentFilterDiv.querySelectorAll('input:checked')).map(el => el.dataset.dept);
+                    const eligibleParticipants = participants.filter(p => !alreadyWonIds.includes(p.id) && selectedDepartments.includes(p.department));
+                    const designatedForThisRound = currentRound.designatedWinners.filter(dwId => !alreadyWonIds.includes(dwId));
+                    const randomDrawCount = currentRound.quantity - currentRound.actualWinners.length - designatedForThisRound.length;
+
+                    if (randomDrawCount < 0) throw new Error('此轮中奖人数已超出设定名额！');
+                    if (eligibleParticipants.length < randomDrawCount) throw new Error('符合条件的参与人数不足！');
+                    if (designatedForThisRound.length === 0 && randomDrawCount === 0) throw new Error('该轮次名额已抽完！');
+
+                    soundEnabled = typeof Tone !== 'undefined' && Tone;
+                    if (soundEnabled) {
+                        Tone.start();
+                        if (!rollingSound) rollingSound = new Tone.MembraneSynth({octaves: 4, pitchDecay: 0.1}).toDestination();
+                        if (!winnerSound) winnerSound = new Tone.PolySynth(Tone.Synth, {oscillator: { type: "sine" }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 }}).toDestination();
+                    }
+                    
+                    animationInterval = setInterval(() => {
+                        const randomName = eligibleParticipants.length > 0
+                            ? eligibleParticipants[Math.floor(Math.random() * eligibleParticipants.length)].name
+                            : '...';
+                        
+                        winnerDisplay.textContent = randomName;
+                        presWinnerDisplay.textContent = randomName;
+                        
+                        if (soundEnabled && rollingSound) rollingSound.triggerAttackRelease("C1", "8n", Tone.now());
+                    }, 50);
+
+                    setTimeout(() => {
+                        clearInterval(animationInterval);
+                        if (soundEnabled && winnerSound) winnerSound.triggerAttackRelease(["C4", "E4", "G4"], "0.5s");
+
+                        let finalNewWinnerIds = [];
+                        finalNewWinnerIds.push(...designatedForThisRound);
+                        if (randomDrawCount > 0) {
+                            const poolForRandom = eligibleParticipants.filter(p => !finalNewWinnerIds.includes(p.id));
+                            const shuffled = [...poolForRandom].sort(() => 0.5 - Math.random());
+                            finalNewWinnerIds.push(...shuffled.slice(0, randomDrawCount).map(p => p.id));
+                        }
+                        
+                        const winnerObjects = finalNewWinnerIds.map(id => participants.find(p => p.id === id)).filter(Boolean);
+                        const winnerHtml = winnerObjects.map(w => `<span class="inline-block p-2 bg-gray-700 rounded-md">${w.name} (${w.employeeId})</span>`).join('');
+                        
+                        if (winnerObjects.length > 0) {
+                            currentRound.actualWinners.push(...finalNewWinnerIds);
+                            winnerDisplay.innerHTML = winnerHtml;
+                            presWinnerDisplay.innerHTML = winnerHtml;
+                        } else {
+                            winnerDisplay.textContent = '无新中奖者';
+                            presWinnerDisplay.textContent = '无新中奖者';
+                        }
+                        
+                        isDrawing = false;
+                        startLotteryButtons.forEach(btn => {
+                            btn.innerHTML = '<i class="fas fa-rocket mr-2"></i> 开始抽奖!';
+                        });
+                        renderAll();
+
+                    }, 3000);
+
+                } catch (error) {
+                    clearInterval(animationInterval);
+                    showToast(error.message, true);
+                    winnerDisplay.textContent = '抽奖出错';
+                    presWinnerDisplay.textContent = '抽奖出错';
+                    
+                    isDrawing = false;
+                     startLotteryButtons.forEach(btn => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-rocket mr-2"></i> 开始抽奖!';
+                    });
+                    renderAll();
+                }
+            }, 10);
+        }
+
+        // --- 拖拽排序 ---
+        let draggedItem = null;
+        drawPlanListDiv.addEventListener('dragstart', e => {
+            draggedItem = e.target;
+            setTimeout(() => e.target.classList.add('dragging'), 0);
+        });
+        drawPlanListDiv.addEventListener('dragend', e => {
+            setTimeout(() => {
+                if(draggedItem) draggedItem.classList.remove('dragging');
+                draggedItem = null;
+                const newOrderIds = Array.from(drawPlanListDiv.children).map(child => parseInt(child.dataset.id));
+                drawPlan.sort((a,b) => newOrderIds.indexOf(a.id) - newOrderIds.indexOf(b.id));
+                updateCurrentDrawInfo();
+            }, 0);
+        });
+        drawPlanListDiv.addEventListener('dragover', e => {
+            e.preventDefault();
+            const afterElement = getDragAfterElement(drawPlanListDiv, e.clientY);
+            if (afterElement == null) {
+                drawPlanListDiv.appendChild(draggedItem);
+            } else {
+                drawPlanListDiv.insertBefore(draggedItem, afterElement);
+            }
+        });
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.draw-plan-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // --- 事件监听 ---
+        enterPresentationBtn.addEventListener('click', () => {
+            configView.classList.add('hidden');
+            presentationView.classList.remove('hidden');
+            document.body.classList.remove('p-4');
+        });
+        exitPresentationBtn.addEventListener('click', () => {
+            presentationView.classList.add('hidden');
+            configView.classList.remove('hidden');
+            document.body.classList.add('p-4');
+        });
+
+        eventTitleInput.addEventListener('input', (e) => {
+            const newTitle = e.target.value;
+            presentationTitle.textContent = newTitle;
+        });
+
+        csvFileInput.addEventListener('change', (e) => handleCsvFile(e.target.files[0]));
+        clearAllBtn.addEventListener('click', () => {
+            if (confirm('确定要清空所有数据吗？此操作不可撤销。')) {
+                participants = [];
+                drawPlan = [];
+                nextParticipantId = 0;
+                nextRoundId = 0;
+                renderAll();
+                winnerDisplay.textContent = '准备就绪';
+                showToast('已清空所有数据。');
+            }
+        });
+        participantListDiv.addEventListener('click', (e) => {
+            if (e.target.closest('.remove-participant')) {
+                const id = parseInt(e.target.closest('.remove-participant').dataset.id);
+                participants = participants.filter(p => p.id !== id);
+                renderAll();
+            }
+        });
+        addRoundBtn.addEventListener('click', addRound);
+        drawPlanListDiv.addEventListener('click', (e) => {
+            const removeBtn = e.target.closest('.remove-round-btn');
+            const designateBtn = e.target.closest('.designate-winner-btn');
+            if (removeBtn) {
+                const id = parseInt(removeBtn.dataset.id);
+                drawPlan = drawPlan.filter(r => r.id !== id);
+                renderAll();
+            }
+            if (designateBtn) {
+                const id = parseInt(designateBtn.dataset.id);
+                openDesignateModal(id);
+            }
+        });
+
+        startLotteryButtons.forEach(btn => btn.addEventListener('click', startLottery));
+        
+        copyAllWinnersBtn.addEventListener('click', () => {
+            const resultsByPrize = {};
+            drawPlan.forEach(round => {
+                if(round.actualWinners.length > 0) {
+                    if(!resultsByPrize[round.prizeName]) {
+                        resultsByPrize[round.prizeName] = [];
+                    }
+                    const winnerDetails = round.actualWinners.map(wId => {
+                       const winner = participants.find(pt => pt.id === wId);
+                       return winner ? `${winner.name} (${winner.department}, ${winner.employeeId})` : '未知中奖者';
+                    });
+                    resultsByPrize[round.prizeName].push(...winnerDetails);
+                }
+            });
+
+            let resultText = "中奖结果总览：\n\n";
+            for (const prizeName in resultsByPrize) {
+                 resultText += `--- ${prizeName} ---\n`;
+                 resultText += resultsByPrize[prizeName].join('\n') + '\n\n';
+            }
+            copyToClipboard(resultText);
+        });
+
+        // Plan Import/Export Listeners
+        importPlanBtn.addEventListener('click', () => planFileInput.click());
+        planFileInput.addEventListener('change', (e) => handlePlanImport(e.target.files[0]));
+        exportPlanBtn.addEventListener('click', handlePlanExport);
+        selectImageBtn.addEventListener('click', () => prizeImageInput.click());
+        prizeImageInput.addEventListener('change', (e) => {
+             const file = e.target.files[0];
+             if (file) {
+                 const reader = new FileReader();
+                 reader.onload = (event) => {
+                     selectedImageDataUrl = event.target.result;
+                     imagePreviewName.textContent = file.name;
+                 };
+                 reader.readAsDataURL(file);
+             }
+        });
+
+        function handlePlanImport(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const lines = e.target.result.split(/\r\n|\n/).filter(line => line.trim() !== '');
+                    if (lines.length === 0) throw new Error("CSV文件为空或格式不正确。");
+
+                    const newPlan = [];
+                    let tempRoundId = nextRoundId;
+                    
+                    const header = lines[0].toLowerCase();
+                    const startIndex = (header.includes('prizename') || header.includes('奖项')) ? 1 : 0;
+
+                    for (let i = startIndex; i < lines.length; i++) {
+                        const [prizeName, roundName, quantity] = lines[i].split(',').map(s => s.trim());
+                        if (prizeName && roundName && quantity && !isNaN(parseInt(quantity))) {
+                            newPlan.push({
+                                id: tempRoundId++,
+                                prizeName,
+                                roundName,
+                                quantity: parseInt(quantity),
+                                imageUrl: null,
+                                designatedWinners: [],
+                                actualWinners: []
+                            });
+                        }
+                    }
+
+                    if (newPlan.length > 0) {
+                        if (drawPlan.length > 0 && !confirm('导入新的抽奖流程会覆盖当前设置，确定要继续吗？')) {
+                            return;
+                        }
+                        drawPlan = newPlan;
+                        nextRoundId = tempRoundId;
+                        showToast(`成功导入 ${newPlan.length} 个抽奖轮次！`);
+                        renderAll();
+                    } else {
+                        throw new Error("未能从文件中解析出有效的轮次。请检查CSV格式：奖项名称,轮次名称,人数");
+                    }
+                } catch (error) {
+                    showToast(`导入失败：${error.message}`, true);
+                } finally {
+                    planFileInput.value = '';
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function handlePlanExport() {
+            if (drawPlan.length === 0) {
+                showToast('没有可导出的抽奖流程。', true);
+                return;
+            }
+
+            let csvContent = "PrizeName,RoundName,Quantity\r\n"; // Removed ImageUrl from header
+
+            drawPlan.forEach(round => {
+                const row = [
+                    `"${round.prizeName.replace(/"/g, '""')}"`,
+                    `"${round.roundName.replace(/"/g, '""')}"`,
+                    round.quantity
+                ].join(',');
+                csvContent += row + "\r\n";
+            });
+
+            const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "lottery_plan.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Modal-related events
+        designateSearchInput.addEventListener('input', (e) => renderDesignateList(e.target.value));
+        designateListDiv.addEventListener('click', (e) => {
+            if (e.target.closest('.designate-toggle-btn')) {
+                const id = parseInt(e.target.closest('.designate-toggle-btn').dataset.id);
+                toggleDesignation(id);
+            }
+        });
+        designateModalCloseBtn.addEventListener('click', () => designateModal.style.display = 'none');
+        window.addEventListener('click', (e) => {
+            if (e.target === designateModal) designateModal.style.display = 'none';
+        });
+
+        // Keypress listeners for convenience
+        prizeNameInput.addEventListener('keypress', e => { if (e.key === 'Enter') { addRoundBtn.click(); }});
+        roundQuantityInput.addEventListener('keypress', e => { if (e.key === 'Enter') { addRoundBtn.click(); }});
+
+        // 初始渲染
+        renderAll();
+    });
+    </script>
+</body>
+</html>
