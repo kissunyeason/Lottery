@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -59,7 +58,12 @@
             background: #4f46e5;
         }
         #presentation-view {
-            background: radial-gradient(circle, #1f2937, #111827);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        .default-bg {
+             background: radial-gradient(circle, #1f2937, #111827);
         }
         #event-title-input {
             background-color: transparent;
@@ -78,7 +82,11 @@
     <!-- 配置视图 -->
     <div id="config-view">
         <header class="text-center mb-4 flex justify-between items-center">
-            <div class="flex-1"></div>
+            <div class="flex-1 text-left">
+                <button id="set-background-btn" class="btn btn-secondary px-4 py-2 rounded-lg text-sm"><i class="fas fa-image mr-2"></i>设置背景</button>
+                <button id="remove-background-btn" class="btn btn-secondary px-4 py-2 rounded-lg text-sm"><i class="fas fa-times mr-2"></i>移除背景</button>
+                <input type="file" id="background-input" class="hidden" accept="image/*">
+            </div>
              <input type="text" id="event-title-input" value="公司年度抽奖" class="flex-1 text-4xl md:text-5xl font-bold tracking-tight focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md px-2">
             <div class="flex-1 text-right">
                 <button id="enter-presentation-mode" class="btn btn-primary px-6 py-2 rounded-lg"><i class="fas fa-desktop mr-2"></i>进入抽奖</button>
@@ -168,7 +176,7 @@
     </div>
     
     <!-- 演示视图 -->
-    <div id="presentation-view" class="hidden min-h-screen w-full flex flex-col items-center justify-center p-8 text-center">
+    <div id="presentation-view" class="hidden min-h-screen w-full flex flex-col items-center justify-center p-8 text-center default-bg">
         <button id="exit-presentation-mode" class="absolute top-5 right-5 text-gray-500 hover:text-white text-2xl z-10">
             <i class="fas fa-times-circle"></i>
         </button>
@@ -255,6 +263,11 @@
         const importPlanBtn = document.getElementById('import-plan-btn');
         const exportPlanBtn = document.getElementById('export-plan-btn');
         const planFileInput = document.getElementById('plan-file-input');
+        
+        // Background Image elements
+        const setBackgroundBtn = document.getElementById('set-background-btn');
+        const removeBackgroundBtn = document.getElementById('remove-background-btn');
+        const backgroundInput = document.getElementById('background-input');
 
         // --- 状态管理 ---
         let participants = []; // {id, name, department, employeeId}
@@ -264,6 +277,7 @@
         let isDrawing = false;
         let activeDesignateRoundId = null;
         let selectedImageDataUrl = null;
+        let customBackgroundUrl = null;
 
         // --- 音效设置 (延迟初始化) ---
         let rollingSound = null;
@@ -679,6 +693,13 @@
         enterPresentationBtn.addEventListener('click', () => {
             configView.classList.add('hidden');
             presentationView.classList.remove('hidden');
+            if (customBackgroundUrl) {
+                presentationView.style.backgroundImage = `url(${customBackgroundUrl})`;
+                presentationView.classList.remove('default-bg');
+            } else {
+                presentationView.style.backgroundImage = '';
+                presentationView.classList.add('default-bg');
+            }
             document.body.classList.remove('p-4');
         });
         exitPresentationBtn.addEventListener('click', () => {
@@ -767,6 +788,26 @@
                  reader.readAsDataURL(file);
              }
         });
+        setBackgroundBtn.addEventListener('click', () => backgroundInput.click());
+        removeBackgroundBtn.addEventListener('click', () => {
+            customBackgroundUrl = null;
+            backgroundInput.value = '';
+            presentationView.style.backgroundImage = '';
+            presentationView.classList.add('default-bg');
+            showToast('已移除背景图片。');
+        });
+        backgroundInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if(file){
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    customBackgroundUrl = event.target.result;
+                    showToast('背景图片已设置！');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
 
         function handlePlanImport(file) {
             if (!file) return;
@@ -781,19 +822,28 @@
                     
                     const header = lines[0].toLowerCase();
                     const startIndex = (header.includes('prizename') || header.includes('奖项')) ? 1 : 0;
+                    
+                    // A more robust CSV parser regex
+                    const csvRegex = /"((?:[^"]|"")*)"\s*,\s*"((?:[^"]|"")*)"\s*,\s*(\d+)/;
 
                     for (let i = startIndex; i < lines.length; i++) {
-                        const [prizeName, roundName, quantity] = lines[i].split(',').map(s => s.trim());
-                        if (prizeName && roundName && quantity && !isNaN(parseInt(quantity))) {
-                            newPlan.push({
-                                id: tempRoundId++,
-                                prizeName,
-                                roundName,
-                                quantity: parseInt(quantity),
-                                imageUrl: null,
-                                designatedWinners: [],
-                                actualWinners: []
-                            });
+                        const match = lines[i].match(csvRegex);
+                        if (match) {
+                             const prizeName = match[1].replace(/""/g, '"');
+                             const roundName = match[2].replace(/""/g, '"');
+                             const quantity = parseInt(match[3]);
+
+                             if (prizeName && roundName && !isNaN(quantity)) {
+                                 newPlan.push({
+                                    id: tempRoundId++,
+                                    prizeName,
+                                    roundName,
+                                    quantity: quantity,
+                                    imageUrl: null,
+                                    designatedWinners: [],
+                                    actualWinners: []
+                                });
+                             }
                         }
                     }
 
@@ -806,7 +856,7 @@
                         showToast(`成功导入 ${newPlan.length} 个抽奖轮次！`);
                         renderAll();
                     } else {
-                        throw new Error("未能从文件中解析出有效的轮次。请检查CSV格式：奖项名称,轮次名称,人数");
+                        throw new Error("未能从文件中解析出有效的轮次。请检查CSV格式：\"奖项名称\",\"轮次名称\",人数");
                     }
                 } catch (error) {
                     showToast(`导入失败：${error.message}`, true);
